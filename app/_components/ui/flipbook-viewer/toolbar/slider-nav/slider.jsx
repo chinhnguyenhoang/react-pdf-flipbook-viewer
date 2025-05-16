@@ -1,8 +1,16 @@
+'use client';
+
 import { cn } from '@/app/_lib/utils';
 import React, { useState, useEffect, useRef } from 'react';
-import Draggable from 'react-draggable';
 import HoverItem from './hover-item';
 import { useDebounce } from '@/app/_hooks/use-debounce';
+import {
+    DndContext,
+    useDraggable,
+    useSensor,
+    useSensors,
+    PointerSensor
+} from '@dnd-kit/core';
 
 const Slider = ({ maxSlide = 10, currentSlide, onSlideChange, totalPages }) => {
     const [value, setValue] = useState(1);
@@ -13,7 +21,9 @@ const Slider = ({ maxSlide = 10, currentSlide, onSlideChange, totalPages }) => {
     const sliderRef = useRef(null);
     const tooltipRef = useRef(null);
 
-    // Update thumb position on value & screen size change >>>>>>>>>
+    const sensors = useSensors(useSensor(PointerSensor));
+
+    // Update thumb position on value & screen size change
     useEffect(() => {
         const updateThumbPosition = () => {
             if (sliderRef.current && !dragging) {
@@ -28,13 +38,13 @@ const Slider = ({ maxSlide = 10, currentSlide, onSlideChange, totalPages }) => {
         return () => window.removeEventListener('resize', updateThumbPosition);
     }, [value, maxSlide, dragging]);
 
-    // Handle dragging the thumb >>>>>>>>>
-    const handleDrag = (e, data) => {
+    // Handle dragging the thumb
+    const handleDragMove = (event) => {
         if (sliderRef.current) {
             const sliderRect = sliderRef.current.getBoundingClientRect();
             const sliderWidth = sliderRect.width;
-            const offsetX = data.x;
-            const thumbWidth = data.node.clientWidth;
+            const offsetX = thumbPosition + event.delta.x;
+            const thumbWidth = 12; // Approximate thumb size in px
             const newValue = Math.min(
                 Math.max(1, Math.round((offsetX / (sliderWidth - thumbWidth)) * (maxSlide - 1) + 1)),
                 maxSlide
@@ -49,7 +59,6 @@ const Slider = ({ maxSlide = 10, currentSlide, onSlideChange, totalPages }) => {
         }
     };
 
-    // Handle onClick to change slide >>>>>>>>>
     const handleSlideChange = (e) => {
         if (sliderRef.current) {
             const rect = sliderRef.current.getBoundingClientRect();
@@ -59,9 +68,8 @@ const Slider = ({ maxSlide = 10, currentSlide, onSlideChange, totalPages }) => {
             );
             setValue(clickedValue);
         }
-    }
+    };
 
-    // Handle hover value tooltip >>>>>>>>>
     const handlePointerMove = (e) => {
         if (sliderRef.current && tooltipRef.current && !dragging) {
             const rect = sliderRef.current.getBoundingClientRect();
@@ -78,28 +86,56 @@ const Slider = ({ maxSlide = 10, currentSlide, onSlideChange, totalPages }) => {
         }
     };
 
-    // Hide hover value tooltip >>>>>>>>>
     const handlePointerLeave = () => {
         setHoverValue(null);
     };
 
-    // Hide hover value tooltip on drag end >>>>>>>>>
     useEffect(() => {
         if (!dragging) {
             handlePointerLeave();
         }
     }, [dragging]);
 
-    // Update value on slide change >>>>>>>>>
     useEffect(() => {
         setValue(currentSlide);
     }, [currentSlide]);
 
-    // Update debounced value on slide change >>>>>>>>>
     const debouncedValue = useDebounce(value, 500);
     useEffect(() => {
         onSlideChange(debouncedValue);
     }, [debouncedValue, onSlideChange]);
+
+    const Thumb = () => {
+        const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: 'slider-thumb' });
+
+        useEffect(() => {
+            setDragging(isDragging);
+        }, [isDragging]);
+
+        const effectiveX = isDragging && transform?.x !== undefined ? thumbPosition + transform.x : thumbPosition;
+        const style = {
+            transform: `translateX(${effectiveX}px)`,
+            transition: isDragging ? 'none' : 'transform 0.3s ease-out'
+        };
+
+        return (
+            <div
+                ref={setNodeRef}
+                {...listeners}
+                {...attributes}
+                className="absolute z-20 size-1 bg-primary rounded-full cursor-pointer"
+                style={style}
+            >
+                <div
+                    className={cn(
+                        "size-3 hover:size-4 bg-primary absolute -top-1 hover:-top-1.5 -left-1 hover:-left-1.5 rounded-full transition-all",
+                        isDragging && 'w-3 h-3 -left-1.5 -top-1.5 rounded-full'
+                    )}
+                />
+            </div>
+        );
+    };
+
     return (
         <div className="py-4">
             <div
@@ -109,24 +145,15 @@ const Slider = ({ maxSlide = 10, currentSlide, onSlideChange, totalPages }) => {
                 onPointerLeave={handlePointerLeave}
                 onPointerCancel={handlePointerLeave}
             >
-                <Draggable
-                    axis="x"
-                    bounds="parent"
-                    position={{ x: thumbPosition, y: 0 }}
-                    onStart={() => setDragging(true)}
-                    onDrag={handleDrag}
-                    onStop={() => setDragging(false)}
-                >
-                    <div className="absolute z-20 size-1 bg-primary rounded-full cursor-pointer">
-                        <div className={cn("size-3 hover:size-4 bg-primary absolute -top-1 hover:-top-1.5 -left-1 hover:-left-1.5 rounded-full transition-all", dragging && 'w-3 h-3 -left-1.5 -top-1.5 rounded-full')}></div>
-                    </div>
-                </Draggable>
-                {/* // Click to change slide >>>>>>>>> */}
+                <DndContext sensors={sensors} onDragMove={handleDragMove}>
+                    <Thumb />
+                </DndContext>
+
                 <div
                     className="absolute inset-0 cursor-pointer w-full h-3 top-1/2 -translate-y-1/2 bg-transparent"
                     onClick={handleSlideChange}
                 />
-                {/* // Tooltip for hover value >>>>>>>>> */}
+
                 <div
                     ref={tooltipRef}
                     className={cn('bg-primary/20 backdrop-blur-sm text-white rounded p-2 text-xs w-fit h-fit', hoverValue === null && 'opacity-0 w-0 h-0 select-none')}

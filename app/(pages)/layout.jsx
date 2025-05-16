@@ -39,7 +39,7 @@ if (typeof Promise.withResolvers === "undefined") {
 export default async function RootLayout({ children }) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={cn("min-h-screen bg-background font-sans antialiased", fontSans.variable)}>
+      <body className={cn("min-h-screen h-100 bg-background font-sans antialiased", fontSans.variable)}>
         <NprogressProviders>
           <ThemeProvider attribute="class" defaultTheme="dark">
             {children}
